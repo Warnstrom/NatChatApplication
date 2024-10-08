@@ -4,7 +4,6 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Text.RegularExpressions;
 using Spectre.Console;
-using HueApi.ColorConverters;
 using Microsoft.Extensions.Configuration;
 
 // Classes representing the event payload structure for subscribing to events.
@@ -36,10 +35,9 @@ public interface ITwitchEventSubListener
 }
 
 // Implementation of the Twitch EventSub listener.
-public class TwitchEventSubListener(IHueController hueController, IConfiguration configuration, TwitchLib.Api.TwitchAPI api,
-IJsonFileController jsonFileController, ArgsService argsService, ITwitchHttpClient twitchHttpClient) : ITwitchEventSubListener
+public class TwitchEventSubListener(IConfiguration configuration, TwitchLib.Api.TwitchAPI api,
+IJsonFileController jsonFileController, ArgsService argsService, ITwitchHttpClient twitchHttpClient, OBSWebSocketService OBSWebSocket) : ITwitchEventSubListener
 {
-    private readonly Regex ValidHexCodePattern = new Regex("([0-9a-fA-F]{6})$"); // Regex pattern to validate hex color codes.
     private ClientWebSocket? _webSocket;                                         // Web socket for connecting to Twitch EventSub.
     // Method to connect to the Twitch EventSub websocket.
     public async Task ValidateAndConnectAsync(Uri websocketUrl)
@@ -73,48 +71,6 @@ IJsonFileController jsonFileController, ArgsService argsService, ITwitchHttpClie
         var eventPayload = new SubscribeEventPayload
         {
             type = "channel.channel_points_custom_reward_redemption.add", // Event type for channel points redemption.
-            version = "1",
-            condition = new Condition
-            {
-                broadcaster_user_id = configuration["ChannelId"]
-            },
-            transport = new Transport
-            {
-                method = "websocket",
-                session_id = sessionId,
-            }
-        };
-
-        await SendMessageAsync(eventPayload); // Send the subscription request.
-    }
-
-    // Subscribe to stream online notifications.
-    private async Task SubscribeToStreamOnlineNotificationsAsync(string sessionId)
-    {
-        var eventPayload = new SubscribeEventPayload
-        {
-            type = "stream.online", // Event type for stream online notification.
-            version = "1",
-            condition = new Condition
-            {
-                broadcaster_user_id = configuration["ChannelId"]
-            },
-            transport = new Transport
-            {
-                method = "websocket",
-                session_id = sessionId,
-            }
-        };
-
-        await SendMessageAsync(eventPayload); // Send the subscription request.
-    }
-
-    // Subscribe to stream offline notifications.
-    private async Task SubscribeToStreamOfflineNotificationsAsync(string sessionId)
-    {
-        var eventPayload = new SubscribeEventPayload
-        {
-            type = "stream.offline", // Event type for stream offline notification.
             version = "1",
             condition = new Condition
             {
@@ -246,12 +202,8 @@ IJsonFileController jsonFileController, ArgsService argsService, ITwitchHttpClie
             {
                 AnsiConsole.MarkupLine($"[bold yellow]Attempting to reconnect... (Attempt {attempt}/{maxAttempts})[/]");
 
-                // Determine which WebSocket URL to connect to (development or production).
                 const string ws = "wss://eventsub.wss.twitch.tv/ws";
-                const string localws = "ws://127.0.0.1:8080/ws";
-                string wsstring = argsService.Args.FirstOrDefault() == "dev" ? localws : ws;
-
-                await ValidateAndConnectAsync(new Uri(wsstring)); // Attempt connection.
+                await ValidateAndConnectAsync(new Uri(ws)); // Attempt connection.
 
                 if (_webSocket.State == WebSocketState.Open)
                 {
@@ -345,13 +297,11 @@ IJsonFileController jsonFileController, ArgsService argsService, ITwitchHttpClie
 
         if (argsService.Args.FirstOrDefault() == "dev")
         {
-            Console.WriteLine(sessionId); // Log the session ID in development mode.
+            Console.WriteLine($"SessionID: {sessionId}"); // Log the session ID in development mode.
         }
 
         // Subscribe to various Twitch events using the session ID.
         await SubscribeToChannelPointRewardsAsync(sessionId);
-        await SubscribeToStreamOnlineNotificationsAsync(sessionId);
-        await SubscribeToStreamOfflineNotificationsAsync(sessionId);
         await SubscribeToChannelChatMessageAsync(sessionId);
     }
 
@@ -370,21 +320,32 @@ IJsonFileController jsonFileController, ArgsService argsService, ITwitchHttpClie
                     await HandleCustomRewardRedemptionAsync(payload);
                     break;
                 case "channel.chat.message":
-                    if (argsService.Args.FirstOrDefault() == "dev")
+                    if (argsService.Args.Length != 0 && argsService.Args[0] == "dev")
                     {
-                        string ChatterUserName = payload["payload"]["event"]["chatter_user_name"].ToString();
-                        string ChatterInput = payload["payload"]["event"]["message"]["text"].ToString();
-                        if (ChatterInput.Length < 10)
+                        if (payload["payload"]["event"]["chatter_user_login"].ToString() == "noraschair" || payload["payload"]["event"]["chatter_user_login"].ToString() == "chayzeruh")
                         {
-                            await HandleColorCommandAsync("left", CleanUserInput(ChatterInput), ChatterUserName);
+                            if (payload["payload"]["event"]["message"]["text"].ToString() == "test")
+                            {
+                                await HandleIRLVoiceBanRedeem(payload["payload"]["event"]["chatter_user_login"].ToString());
+                            }
+                            if (payload["payload"]["event"]["message"]["text"].ToString() == "mute")
+                            {
+                                OBSWebSocket.MuteMicrophone();
+                            }
+                            if (payload["payload"]["event"]["message"]["text"].ToString() == "unmute")
+                            {
+                                OBSWebSocket.UnmuteMicrophone();
+                            }
+                            if (payload["payload"]["event"]["message"]["text"].ToString() == "show")
+                            {
+                                OBSWebSocket.UpdateSourceVisibility(configuration["OBS_SourceName"], true);
+                            }
+                            if (payload["payload"]["event"]["message"]["text"].ToString() == "hide")
+                            {
+                                OBSWebSocket.UpdateSourceVisibility(configuration["OBS_SourceName"], false);
+                            }
                         }
                     }
-                    break;
-                case "stream.online":
-                    await HandleStreamOnlineNotificationAsync(payload);
-                    break;
-                case "stream.offline":
-                    await HandleStreamOfflineNotificationAsync(payload);
                     break;
                 default:
                     Console.WriteLine("Unhandled event type: " + eventType); // Log unhandled event types.
@@ -397,110 +358,52 @@ IJsonFileController jsonFileController, ArgsService argsService, ITwitchHttpClie
         }
     }
 
-    // Method to handle the "stream.online" event type.
-    private async Task HandleStreamOnlineNotificationAsync(JObject payload)
-    {
-        string StreamerUsername = payload["payload"]["event"]["broadcaster_user_name"].ToString(); // Get the broadcaster's username.
-        Console.WriteLine($"{StreamerUsername} went live!"); // Log the stream online event.
-    }
-
-    // Method to handle the "stream.offline" event type.
-    private async Task HandleStreamOfflineNotificationAsync(JObject payload)
-    {
-        string StreamerUsername = payload["payload"]["event"]["broadcaster_user_name"].ToString(); // Get the broadcaster's username.
-        Console.WriteLine($"{StreamerUsername} went offline!"); // Log the stream offline event.
-    }
-
     // Method to handle custom reward redemptions from Twitch.
     private async Task HandleCustomRewardRedemptionAsync(JObject payload)
     {
         string RewardTitle = payload["payload"]["event"]["reward"]["title"].ToString();
-        string UserInput = payload["payload"]["event"]["user_input"].ToString();
         string RedeemUsername = payload["payload"]["event"]["user_name"].ToString();
 
-        // Handle specific reward titles.
         switch (RewardTitle)
         {
-            case "Change left lamp color":
-                await HandleColorCommandAsync("left", CleanUserInput(UserInput), RedeemUsername);
-                break;
-            case "Change right lamp color":
-                await HandleColorCommandAsync("right", CleanUserInput(UserInput), RedeemUsername);
+            case "IRL voice ban":
+                await HandleIRLVoiceBanRedeem(RedeemUsername);
                 break;
             default:
                 Console.WriteLine("Unknown command: " + RewardTitle); // Log unknown commands.
                 break;
         }
     }
-
-    // Method to clean up user input (e.g., remove special characters).
-    private static string CleanUserInput(string userInput)
+    private async Task HandleIRLVoiceBanRedeem(string RedeemUsername)
     {
-        userInput = userInput.Trim().ToLower(); // Normalize input.
+        AnsiConsole.Markup($"[bold yellow]{RedeemUsername} requested the Voice Ban Redeem[/]\n");
 
-        if (userInput.Contains('#'))
-        {
-            userInput = userInput.Replace("#", ""); // Remove the hash symbol if present.
-        }
-        return userInput;
+        OBSWebSocket.MuteMicrophone();
+        OBSWebSocket.UpdateSourceVisibility(configuration["OBS_SourceName"], true);
+
+        AnsiConsole.Markup("[bold yellow]Voice ban active. Countdown: 2 minutes[/]\n");
+
+        var countdownTime = TimeSpan.FromMinutes(2);
+
+        await AnsiConsole.Status()
+            .StartAsync("Waiting for 2 minutes...", async ctx =>
+            {
+                while (countdownTime.TotalSeconds > 0)
+                {
+                    ctx.Status = $"[bold yellow]Remaining time: {countdownTime.Minutes:D2}:{countdownTime.Seconds:D2}[/]";
+
+                    await Task.Delay(1000);
+                    countdownTime = countdownTime.Subtract(TimeSpan.FromSeconds(1));
+                }
+            });
+
+        // Once the timer completes, unmute the microphone and hide the source
+        OBSWebSocket.UnmuteMicrophone();
+        OBSWebSocket.UpdateSourceVisibility(configuration["OBS_SourceName"], false);
+
+        AnsiConsole.Markup("[bold yellow]Voice Ban Redeem request completed![/]\n");
     }
 
-    // Method to handle color commands (e.g., changing lamp colors).
-    private async Task HandleColorCommandAsync(string lamp, string color, string RedeemUsername)
-    {
-        RGBColor finalColor = await GetColorAsync(color, RedeemUsername); // Resolve the color input.
-        await hueController.SetLampColorAsync(lamp, finalColor); // Set the lamp color using the resolved RGB value.
-    }
-
-    // Method to resolve the color input into an RGB color.
-    private async Task<RGBColor> GetColorAsync(string color, string RedeemUsername)
-    {
-        if (argsService.Args.FirstOrDefault() == "dev")
-        {
-            Console.WriteLine(color); // Log the requested color in development mode.
-        }
-
-
-        if (color.Equals("random"))
-        {
-            return RGBColor.Random(); // Return a random color if requested.
-        }
-
-        string? baseColor = await HexColorMapDictionary.Get(color); // Attempt to map the color name to a hex code.
-
-        if (baseColor != null)
-        {
-            return new RGBColor(baseColor); // Return the mapped RGB color.
-        }
-
-        // Check if the input is a valid hex code.
-        if (ValidHexCodePattern.IsMatch(color))
-        {
-            return new RGBColor(color); // Return the RGB color for the hex code.
-        }
-
-        await SendInvalidColorMessageAsync(RedeemUsername, color); // Notify the user in Twitch chat if the color is invalid.
-        return RGBColor.Random(); // Default to a random color if the input is invalid.
-    }
-
-    // Method to send a message notifying the user of an invalid color input.
-    private async Task SendInvalidColorMessageAsync(string RedeemUsername, string invalidColor)
-    {
-        var errorMessage = new
-        {
-            broadcaster_id = configuration["ChannelId"],
-            sender_id = configuration["ChannelId"],
-            message = $"@{RedeemUsername} Unfortunately it appears that '{invalidColor}' is not currently supported, or an invalid hex code was provided. Yuki chose a color for you instead. asecre3RacDerp",
-        };
-
-        string errorMessageJson = JsonConvert.SerializeObject(errorMessage);
-        var response = await twitchHttpClient.PostAsync("ChatMessage", errorMessageJson);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            Console.WriteLine($"Failed to send message. Status code: {response.StatusCode}"); // Log failure to send message.
-        }
-    }
 
     // Handle the "session_keepalive" event type (currently does nothing).
     private Task HandleKeepAliveAsync(JObject payload)

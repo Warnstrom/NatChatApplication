@@ -1,6 +1,7 @@
 /bin
 /obj
-MainApp/appsettings.json
+appsettings.json
+devmodesettings.json
 /.env
 huebridge_cacert.pem
 Add redeems Change left.txt

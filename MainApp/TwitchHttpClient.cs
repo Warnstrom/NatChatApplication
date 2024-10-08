@@ -19,13 +19,15 @@ public class TwitchHttpClient : ITwitchHttpClient
     private readonly HttpClient _httpClient;
     private readonly string _clientId;
     private string _oauthToken;
-     private readonly IConfiguration _configuration;
+    private readonly IConfiguration _configuration;
+    private readonly ArgsService _argsService;
     private readonly TwitchLib.Api.TwitchAPI _api;
 
-    public TwitchHttpClient(IConfiguration configuration, TwitchLib.Api.TwitchAPI api)
+    public TwitchHttpClient(IConfiguration configuration, TwitchLib.Api.TwitchAPI api, ArgsService argsService)
     {
         _configuration = configuration;
         _api = api;
+        _argsService = argsService;
         _clientId = configuration["ClientId"];
         _oauthToken = configuration["AccessToken"];
         _httpClient = new();
@@ -45,10 +47,26 @@ public class TwitchHttpClient : ITwitchHttpClient
         _httpClient.DefaultRequestHeaders.Add("Authorization", "Bearer " + _oauthToken);
     }
 
-   public async Task<HttpResponseMessage> PostAsync(string type, string message)
+    private void LogRequestHeaders()
+    {
+        Console.WriteLine("Logging HTTP Request Headers:");
+
+        foreach (var header in _httpClient.DefaultRequestHeaders)
+        {
+            Console.WriteLine($"{header.Key}: {string.Join(", ", header.Value)}");
+        }
+    }
+
+    public async Task<HttpResponseMessage> PostAsync(string type, string message)
     {
         try
         {
+            if (_argsService.Args.Length != 0 && _argsService.Args[0] == "dev")
+            {
+                LogRequestHeaders();
+                Console.WriteLine(message);
+            }
+
             if (TwitchTypeToUrlMap.TryGetValue(type, out string url))
             {
                 HttpResponseMessage response = await _httpClient.PostAsync(url, new StringContent(message, Encoding.UTF8, "application/json"));

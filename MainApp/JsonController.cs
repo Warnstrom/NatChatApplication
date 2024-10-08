@@ -6,6 +6,7 @@ public interface IJsonFileController
 {
     Task<T?> GetValueByKeyAsync<T>(string key);
     Task UpdateAsync(string key, string value);
+    Task<string> GetJsonStringAsync();
 }
 
 public class JsonFileController : IJsonFileController
@@ -19,7 +20,7 @@ public class JsonFileController : IJsonFileController
     {
         _filePath = filePath;
         _jsonOptions = new JsonSerializerOptions { WriteIndented = true };
-        
+
         if (!File.Exists(_filePath))
         {
             InitializeDefaultJsonFile();
@@ -31,16 +32,18 @@ public class JsonFileController : IJsonFileController
     {
         var defaultJson = new JsonObject
         {
-            ["bridgeIp"] = "",
-            ["bridgeId"] = "",
-            ["AppKey"] = "",
-            ["HueStreamingClientKey"] = "",
             ["AccessToken"] = "",
             ["RefreshToken"] = "",
+            ["ChannelId"] = "",
             ["ClientSecret"] = "",
             ["ClientId"] = "",
-            ["RedirectUri"] = "http://localhost:8004/callback/",
-            ["ApplicationVersion"] = "0.0.1"
+            ["OBS_IP"] = "",
+            ["OBS_Port"] = "",
+            ["OBS_Password"] = "",
+            ["OBS_MicName"] = "",
+            ["OBS_Scene"] = "",
+            ["OBS_SourceName"] = "",
+            ["RedirectUri"] = "http://localhost:8004/callback/"
         };
 
         File.WriteAllText(_filePath, defaultJson.ToJsonString(_jsonOptions));
@@ -121,12 +124,9 @@ public class JsonFileController : IJsonFileController
         return default;
     }
 
-    public async Task<Dictionary<string, string>> ReadAsDictionaryAsync()
+    public async Task<string> GetJsonStringAsync()
     {
         var jsonData = await LoadJsonDataAsync();
-        return jsonData.ToDictionary(
-            kvp => kvp.Key,
-            kvp => kvp.Value?.ToString() ?? string.Empty
-        );
+        return jsonData.ToJsonString(); // Convert to string for display
     }
 }
