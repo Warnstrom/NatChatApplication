@@ -5,6 +5,7 @@ using Spectre.Console;
 public interface ITwitchHttpClient
 {
     Task<HttpResponseMessage> PostAsync(string type, string message);
+    Task<string> GetAsync(string type, string query);
     Task UpdateOAuthToken(string newToken = "");
 }
 
@@ -14,6 +15,8 @@ public class TwitchHttpClient : ITwitchHttpClient
     {
         { "AddSubscription", "https://api.twitch.tv/helix/eventsub/subscriptions" },
         { "ChatMessage", "https://api.twitch.tv/helix/chat/messages" },
+        { "SearchChannels", "https://api.twitch.tv/helix/search/channels" },
+        { "Streams", "https://api.twitch.tv/helix/streams" },
     };
 
     private readonly HttpClient _httpClient;
@@ -97,4 +100,24 @@ public class TwitchHttpClient : ITwitchHttpClient
             throw;
         }
     }
+
+    // Query format: ?query=a_seagull&live_only=true etc.
+    public async Task<string> GetAsync(string type, string query)
+{
+    if (TwitchTypeToUrlMap.TryGetValue(type, out string url))
+    {
+        HttpResponseMessage response = await _httpClient.GetAsync($"{url}{query}");
+
+        response.EnsureSuccessStatusCode();
+
+        string content = await response.Content.ReadAsStringAsync();
+
+        return content;
+    }
+    else
+    {
+        throw new ArgumentException($"The type '{type}' is not valid.");
+    }
+}
+
 }
