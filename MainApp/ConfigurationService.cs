@@ -9,14 +9,17 @@ public interface IConfigurationService
 }
 public class ConfigurationService(IJsonFileController jsonFileController, ITwitchHttpClient twitchHttpClient, IConfiguration configuration) : IConfigurationService
 {
+    private HashSet<string> sensitiveKeys = new HashSet<string>
+            {
+            "OBS_IP", "OBS_Port", "OBS_Password", "AccessToken",
+            "RefreshToken", "ClientSecret", "ClientId"
+            };
+
     public async Task EditConfigurationAsync()
     {
         bool StreamOnline = await CheckIfStreamIsOnline();
 
-        var sensitiveKeys = new HashSet<string>
-            {
-                "AccessToken", "RefreshToken", "ClientSecret", "OBS_Password", "ClientId"
-            };
+
 
         var keys = new Dictionary<int, string>
             {
@@ -91,11 +94,6 @@ public class ConfigurationService(IJsonFileController jsonFileController, ITwitc
         // Mask sensitive information if the flag is true
         if (maskSensitiveInfo)
         {
-            var sensitiveKeys = new List<string>
-        {
-            "OBS_IP", "OBS_Port", "OBS_Password", "AccessToken",
-            "RefreshToken", "ClientSecret", "ClientId"
-        };
 
             foreach (var key in sensitiveKeys)
             {
