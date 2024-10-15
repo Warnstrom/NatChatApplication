@@ -7,7 +7,7 @@ public interface IConfigurationService
 {
     Task EditConfigurationAsync();
 }
-public class ConfigurationService(IJsonFileController jsonFileController, ITwitchHttpClient twitchHttpClient, IConfiguration configuration) : IConfigurationService
+public class ConfigurationService(IJsonFileController jsonFileController, ITwitchHttpClient twitchHttpClient, IConfigurationRoot configuration) : IConfigurationService
 {
     private HashSet<string> sensitiveKeys = new HashSet<string>
             {
@@ -22,18 +22,18 @@ public class ConfigurationService(IJsonFileController jsonFileController, ITwitc
 
 
         var keys = new Dictionary<int, string>
-            {
-                { 0, "Exit" },
-                { 1, "AccessToken" },
-                { 2, "RefreshToken" },
-                { 3, "ChannelId" },
-                { 4, "ClientSecret" },
-                { 5, "ClientId" },
-                { 7, "OBS_IP" },
-                { 8, "OBS_Port" },
-                { 9, "OBS_Password" },
-                { 10, "RedirectUri" }
-            };
+{
+    { 0, "Exit" },
+    { 1, "AccessToken" },
+    { 2, "RefreshToken" },
+    { 3, "ChannelId" },
+    { 4, "ClientSecret" },
+    { 5, "ClientId" },
+    { 7, "OBS_IP" },
+    { 8, "OBS_Port" },
+    { 9, "OBS_Password" },
+    { 10, "RedirectUri" }
+};
 
         await ShowConfigurationWithStreamStatusCheck(StreamOnline);
 
@@ -43,10 +43,20 @@ public class ConfigurationService(IJsonFileController jsonFileController, ITwitc
             .AddChoices(keys.Values.ToArray()) // Add the keys as choices
             .HighlightStyle(new Style(foreground: Color.LightSkyBlue1)) // Subtle blue highlight for selected option
             .Mode(SelectionMode.Leaf) // Leaf mode for modern selection UX
-            .WrapAround(false) // Disable wrap-around behavior
+            .WrapAround(true)
             .UseConverter(text => $"[dim white]»[/] [white]{text}[/]");
 
+        // Get the selected value from the prompt
         string selectedKey = AnsiConsole.Prompt(prompt);
+
+        // Check if the selected key is "Exit"
+        if (selectedKey == "Exit")
+        {
+            // Exit the method early
+            return;
+        }
+
+        // Proceed with the rest of the code if the user didn't choose to exit
         string? newValue = null;
 
         // Check if the selected key is in the list of sensitive keys
@@ -64,6 +74,27 @@ public class ConfigurationService(IJsonFileController jsonFileController, ITwitc
         }
 
         await jsonFileController.UpdateAsync(selectedKey, newValue);
+
+        // Show updated configuration again after making changes
+        await ShowConfigurationWithStreamStatusCheck(StreamOnline);
+
+        // Check if the selected key is in the list of sensitive keys
+        if (sensitiveKeys.Contains(selectedKey) && StreamOnline)
+        {
+            newValue = AnsiConsole.Prompt(
+                new TextPrompt<string>($"[yellow]Enter the new value for {selectedKey}:[/]")
+                    .Secret());
+        }
+        else
+        {
+            newValue = AnsiConsole.Prompt(
+                new TextPrompt<string>($"[yellow]Enter the new value for {selectedKey}:[/]")
+                    .AllowEmpty());
+        }
+
+        await jsonFileController.UpdateAsync(selectedKey, newValue);
+
+        configuration.Reload();
 
         await ShowConfigurationWithStreamStatusCheck(StreamOnline);
     }

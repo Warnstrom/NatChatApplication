@@ -64,12 +64,13 @@ namespace TwitchChatHueControls
                 .SetBasePath(Directory.GetCurrentDirectory())
                 .AddJsonFile(SettingsFile, optional: true, reloadOnChange: true);
             // Build the configuration object
-            IConfiguration configuration = configurationBuilder.Build();
-            // Register the required services and controllers
-            services.AddSingleton<IConfiguration>(configuration);
+            IConfigurationRoot configurationRoot = configurationBuilder.Build();
+            // Register the required services and controllers65
+            services.AddSingleton<IConfiguration>(configurationRoot);
+            services.AddSingleton<IConfigurationRoot>(configurationRoot);
             services.AddSingleton<IConfigurationService, ConfigurationService>();
-            services.AddSingleton(new ArgsService(args));
             services.AddSingleton<IJsonFileController>(sp => new JsonFileController(SettingsFile));
+            services.AddSingleton(new ArgsService(args));
             services.AddSingleton<TwitchLib.Api.TwitchAPI>();
             services.AddSingleton<TwitchEventSubListener>();
             services.AddSingleton<OBSWebSocketService>();
