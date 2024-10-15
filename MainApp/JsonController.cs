@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading;
+using Microsoft.Extensions.Configuration;
 
 public interface IJsonFileController
 {
@@ -14,10 +15,12 @@ public class JsonFileController : IJsonFileController
     private readonly string _filePath;
     private readonly JsonSerializerOptions _jsonOptions;
     private JsonObject _cachedJsonData;
+    private IConfigurationRoot _configuration;
     private readonly SemaphoreSlim _fileLock = new(1, 1); // Ensures thread-safe access to the file
 
-    public JsonFileController(string filePath)
+    public JsonFileController(string filePath, IConfigurationRoot configuration)
     {
+        _configuration = configuration;
         _filePath = filePath;
         _jsonOptions = new JsonSerializerOptions { WriteIndented = true };
 
@@ -103,6 +106,7 @@ public class JsonFileController : IJsonFileController
         var jsonData = await LoadJsonDataAsync();
         jsonData[key] = value;
         await SaveJsonDataAsync(jsonData);
+        _configuration.Reload();
     }
 
     public async Task<T?> GetValueByKeyAsync<T>(string key)

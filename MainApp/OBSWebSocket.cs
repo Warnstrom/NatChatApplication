@@ -5,11 +5,15 @@ using Spectre.Console;
 
 public interface IOBSWebSocketService
 {
-    Task ConnectAsync();        // Connect to the websocket server.
+    Task Connect();        // Connect to the websocket server.
     void Disconnect();        // Disconnect to the websocket server.
+    bool IsConnected();
     void UnmuteMicrophone();
     void MuteMicrophone();
     void UpdateSourceVisibility(string sourceName, bool visible);
+    List<string> GetScenes();
+    List<string> GetSceneSources();
+    List<string> GetAudioInput();
 }
 
 // Implementation of the Twitch EventSub listener.
@@ -25,7 +29,7 @@ public class OBSWebSocketService(IConfiguration configuration) : IOBSWebSocketSe
         _obs.Disconnected += Obs_Disconnected;
     }
 
-    public async Task ConnectAsync()
+    public async Task Connect()
     {
         string obsIp = configuration["OBS_IP"];
         string obsPort = configuration["OBS_PORT"];
@@ -35,7 +39,7 @@ public class OBSWebSocketService(IConfiguration configuration) : IOBSWebSocketSe
         try
         {
             // Log the connection attempt
-            AnsiConsole.Markup("[bold yellow]Attempting to connect to OBS WebSocket...[/]\n");
+            AnsiConsole.Markup("\n[bold yellow]Attempting to connect to OBS WebSocket...[/]\n");
 
             // Asynchronous connection to OBS
             _obs.ConnectAsync(obsUrl, obsPassword);
@@ -44,18 +48,24 @@ public class OBSWebSocketService(IConfiguration configuration) : IOBSWebSocketSe
         catch (AuthFailureException)
         {
             // Log authentication failure
-            AnsiConsole.Markup("[bold red]Error: Authentication failed when connecting to OBS WebSocket.[/]\n");
+            AnsiConsole.Markup("\n[bold red]Error: Authentication failed when connecting to OBS WebSocket.[/]\n");
         }
         catch (ErrorResponseException ex)
         {
             // Log specific OBS error messages
-            AnsiConsole.Markup($"[bold red]Error: Failed to connect to OBS. Details: {ex.Message}[/]\n");
+            AnsiConsole.Markup($"\n[bold red]Error: Failed to connect to OBS. Details: {ex.Message}[/]\n");
+
         }
         catch (Exception ex)
         {
             // Log any unexpected errors
             AnsiConsole.Markup($"[bold red]Unexpected error: {ex.Message}[/]\n");
         }
+    }
+
+    public bool IsConnected()
+    {
+        return _obs.IsConnected;
     }
 
     public void Disconnect()
@@ -74,7 +84,7 @@ public class OBSWebSocketService(IConfiguration configuration) : IOBSWebSocketSe
     // Event handler for successful connection
     private void Obs_Connected(object? sender, EventArgs e)
     {
-        AnsiConsole.Markup("[bold green]Connected to OBS WebSocket![/]\n");
+        AnsiConsole.Markup("\n[bold green]Connected to OBS WebSocket![/]\n");
     }
 
     // Event handler for disconnection
@@ -106,6 +116,8 @@ public class OBSWebSocketService(IConfiguration configuration) : IOBSWebSocketSe
                 AnsiConsole.Markup($"[bold red]Connection error: Requested feature is unsupported due to hardware or software limitations.[/]\n");
                 break;
             case ObsCloseCodes.UnknownReason:
+                AnsiConsole.Markup($"[bold red]Disconnected from OBS WebSocket. Reason: Unknown reason (Code: {e.ObsCloseCode}).[/]\n");
+                break;
             default:
                 // Generic message for unrecognized close codes
                 AnsiConsole.Markup($"[bold red]Disconnected from OBS WebSocket. Reason: Unknown error (Code: {e.ObsCloseCode}).[/]\n");
@@ -118,6 +130,62 @@ public class OBSWebSocketService(IConfiguration configuration) : IOBSWebSocketSe
             AnsiConsole.Markup($"[bold red]Additional info: {e.WebsocketDisconnectionInfo.Exception.Message}[/]\n");
         }
     }
+
+    public List<string> GetScenes()
+    {
+        if (_obs.IsConnected)
+        {
+            try
+            {
+                var sceneItems = _obs.GetSceneList();
+                return sceneItems.Scenes.Select(x => x.Name).ToList();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error?!?!: {ex.Message}");
+            }
+        }
+        return null;
+    }
+
+    public List<string> GetAudioInput()
+    {
+        if (_obs.IsConnected)
+        {
+            try
+            {
+                var sceneItems = _obs.GetInputKindList();
+
+                var sceneItemsList = _obs.GetInputList("pulse_input_capture").Select(x => x.InputName).ToList();
+                return sceneItemsList;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error?!?!: {ex.Message}");
+            }
+        }
+        return null;
+    }
+
+    public List<string> GetSceneSources()
+    {
+        if (_obs.IsConnected)
+        {
+            try
+            {
+                // Get the scene item ID for the source
+                List<OBSWebsocketDotNet.Types.SceneItemDetails> sceneItems = _obs.GetSceneItemList(configuration["OBS_Scene"]);
+                List<string> sourcelist = sceneItems.Select(x => x.SourceName).ToList();
+                return sourcelist;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error?!?!: {ex.Message}");
+            }
+        }
+        return null;
+    }
+
 
     // Mute the microphone source
     public void MuteMicrophone()

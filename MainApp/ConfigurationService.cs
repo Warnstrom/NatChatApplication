@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Microsoft.Extensions.Configuration;
 using Spectre.Console;
 using Spectre.Console.Json;
@@ -9,7 +8,7 @@ public interface IConfigurationService
 }
 public class ConfigurationService(IJsonFileController jsonFileController, ITwitchHttpClient twitchHttpClient, IConfigurationRoot configuration) : IConfigurationService
 {
-    private HashSet<string> sensitiveKeys = new HashSet<string>
+    private readonly HashSet<string> sensitiveKeys = new HashSet<string>
             {
             "OBS_IP", "OBS_Port", "OBS_Password", "AccessToken",
             "RefreshToken", "ClientSecret", "ClientId"
@@ -17,7 +16,7 @@ public class ConfigurationService(IJsonFileController jsonFileController, ITwitc
 
     public async Task EditConfigurationAsync()
     {
-        bool StreamOnline = await CheckIfStreamIsOnline();
+        bool StreamOnline = await twitchHttpClient.CheckIfStreamIsOnline();
 
 
 
@@ -155,16 +154,5 @@ public class ConfigurationService(IJsonFileController jsonFileController, ITwitc
                 .RoundedBorder()
                 .BorderColor(Color.Green));
     }
-    private async Task<bool> CheckIfStreamIsOnline()
-    {
-        var content = await twitchHttpClient.GetAsync("Streams", $"?user_id={configuration["ChannelId"]}");
 
-        var jsonResponse = JsonSerializer.Deserialize<JsonObject>(content);
-
-        // Data array is empty if the stream is not live
-        // And is filled if the stream is live 
-        bool IsLive = jsonResponse["data"].AsArray().Count() != 0;
-
-        return IsLive;
-    }
 }

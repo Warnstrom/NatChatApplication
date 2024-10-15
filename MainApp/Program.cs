@@ -69,7 +69,7 @@ namespace TwitchChatHueControls
             services.AddSingleton<IConfiguration>(configurationRoot);
             services.AddSingleton<IConfigurationRoot>(configurationRoot);
             services.AddSingleton<IConfigurationService, ConfigurationService>();
-            services.AddSingleton<IJsonFileController>(sp => new JsonFileController(SettingsFile));
+            services.AddSingleton<IJsonFileController>(sp => new JsonFileController(SettingsFile, configurationRoot));
             services.AddSingleton(new ArgsService(args));
             services.AddSingleton<TwitchLib.Api.TwitchAPI>();
             services.AddSingleton<TwitchEventSubListener>();
@@ -272,14 +272,6 @@ namespace TwitchChatHueControls
             bool twitchConfigured = await ValidateTwitchConfiguration();
             bool OBS_Configured = ValidateOBSConfiguration(); // Check if Twitch is configured
 
-            if (!OBS_Configured)
-            {
-                return;
-            }
-            else
-            {
-                OBSWebSocket.InitializeOBSWebsocket();
-            }
             if (!twitchConfigured)
             {
                 AnsiConsole.Markup("[bold red]\nError: Twitch Configuration is incomplete.\n[/]");
@@ -287,7 +279,6 @@ namespace TwitchChatHueControls
             }
             else
             {
-                await OBSWebSocket.ConnectAsync();
 
                 const string ws = "wss://eventsub.wss.twitch.tv/ws"; // Twitch EventSub websocket endpoint
                 await eventSubListener.ValidateAndConnectAsync(new Uri(ws)); // Connect to the EventSub websocket
@@ -313,46 +304,76 @@ namespace TwitchChatHueControls
         // Method to configure Twitch OAuth tokens
         private async Task<bool> ConfigureOBSWebSocketInfo()
         {
-            string OBS_IP = configuration["OBS_IP"];
-            string OBS_PORT = configuration["OBS_Port"];
-            string OBS_Password = configuration["OBS_Password"];
-            string OBS_Scene = configuration["OBS_Scene"];
-            string OBS_MicName = configuration["OBS_MicName"];
-            string OBS_SourceName = configuration["OBS_SourceName"];
+            OBSWebSocket.InitializeOBSWebsocket();
 
-            if (string.IsNullOrEmpty(OBS_IP))
-            {
-                OBS_IP = AnsiConsole.Ask<string>("[yellow]Please enter the OBS Websocket Ip Address:[/]");
-                await jsonController.UpdateAsync("OBS_IP", OBS_IP);
-            }
-            if (string.IsNullOrEmpty(OBS_PORT))
-            {
-                OBS_PORT = AnsiConsole.Ask<string>("[yellow]Please enter the OBS Port:[/]");
-                await jsonController.UpdateAsync("OBS_Port", OBS_PORT);
-            }
-            if (string.IsNullOrEmpty(OBS_Password))
-            {
-                OBS_Password = AnsiConsole.Ask<string>("[yellow]Please enter the OBS Websocket Password:[/]");
-                await jsonController.UpdateAsync("OBS_Password", OBS_Password);
-            }
-            if (string.IsNullOrEmpty(OBS_MicName))
-            {
-                OBS_MicName = AnsiConsole.Ask<string>("[yellow]Please enter the name of the Microphone in OBS:[/]");
-                await jsonController.UpdateAsync("OBS_MicName", OBS_MicName);
-            }
-            if (string.IsNullOrEmpty(OBS_Scene))
-            {
-                OBS_Scene = AnsiConsole.Ask<string>("[yellow]Please enter the OBS Scene name:[/]");
-                await jsonController.UpdateAsync("OBS_Scene", OBS_Scene);
-            }
-            if (string.IsNullOrEmpty(OBS_SourceName))
-            {
-                OBS_SourceName = AnsiConsole.Ask<string>("[yellow]Please enter the OBS Source name:[/]");
-                await jsonController.UpdateAsync("OBS_SourceName", OBS_SourceName);
-            }
-            bool OBS_Configured = ValidateOBSConfiguration();
-            return OBS_Configured;// Check if Twitch is configured
+            await ConfigureOBSConnectionInfo();
+            await EnsureOBSConnectionAsync();
+
+            // Configure Scene, Source, and Mic Name if not set
+            await ConfigureIfMissing("OBS_Scene", "Select a scene:", OBSWebSocket.GetScenes);
+            await ConfigureIfMissing("OBS_SourceName", "Select a source:", OBSWebSocket.GetSceneSources);
+            await ConfigureIfMissing("OBS_MicName", "Select an input source:", OBSWebSocket.GetAudioInput);
+
+            bool obsConfigured = ValidateOBSConfiguration();
+            return obsConfigured;
         }
+
+        // Method to configure OBS connection information
+        private async Task ConfigureOBSConnectionInfo()
+        {
+            string obsIp = await GetOrUpdateConfigValue("OBS_IP", "[yellow]Please enter the OBS Websocket IP Address:[/]");
+            string obsPort = await GetOrUpdateConfigValue("OBS_Port", "[yellow]Please enter the OBS Port:[/]");
+            string obsPassword = await GetOrUpdateConfigValue("OBS_Password", "[yellow]Please enter the OBS Websocket Password:[/]");
+
+            // No need to await, as connection is synchronous in this context
+            await OBSWebSocket.Connect();
+        }
+
+        // Helper method to ensure OBS is connected
+        private async Task EnsureOBSConnectionAsync()
+        {
+            while (!OBSWebSocket.IsConnected())
+            {
+                AnsiConsole.Markup("[yellow]Waiting for OBS to connect...[/]\n");
+                await Task.Delay(1000); // Wait for 1 second before checking again
+            }
+        }
+
+        // Generic method to configure a value if it's missing
+        private async Task ConfigureIfMissing(string configKey, string promptTitle, Func<List<string>> getChoicesFunc)
+        {
+            string configValue = configuration[configKey];
+
+            if (string.IsNullOrEmpty(configValue))
+            {
+                List<string> choices = getChoicesFunc.Invoke();
+
+                var prompt = new SelectionPrompt<string>()
+                    .Title($"[grey]{promptTitle}[/]")
+                    .AddChoices(choices)
+                    .HighlightStyle(new Style(foreground: Color.LightSkyBlue1)) // Subtle blue highlight for selected option
+                    .Mode(SelectionMode.Leaf) // Leaf mode for modern selection UX
+                    .WrapAround(false)        // Disable wrap-around behavior
+                    .PageSize(5);            // Fit all options on one page
+
+                // Get the selected option
+                string selectedOption = AnsiConsole.Prompt(prompt);
+                await jsonController.UpdateAsync(configKey, selectedOption);
+            }
+        }
+
+        // Helper method to retrieve or update a configuration value
+        private async Task<string> GetOrUpdateConfigValue(string key, string prompt)
+        {
+            string value = configuration[key];
+            if (string.IsNullOrEmpty(value))
+            {
+                value = AnsiConsole.Ask<string>(prompt);
+                await jsonController.UpdateAsync(key, value);
+            }
+            return value;
+        }
+
 
         // Method to configure Twitch OAuth tokens
         private async Task<bool> ConfigureTwitchTokens()

@@ -1,12 +1,14 @@
 using System.Text;
 using Microsoft.Extensions.Configuration;
 using Spectre.Console;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 public interface ITwitchHttpClient
 {
     Task<HttpResponseMessage> PostAsync(string type, string message);
-    Task<string> GetAsync(string type, string query);
     Task UpdateOAuthToken(string newToken = "");
+    Task<bool> CheckIfStreamIsOnline();
 }
 
 public class TwitchHttpClient : ITwitchHttpClient
@@ -102,7 +104,7 @@ public class TwitchHttpClient : ITwitchHttpClient
     }
 
     // Query format: ?query=a_seagull&live_only=true etc.
-    public async Task<string> GetAsync(string type, string query)
+    private async Task<string> GetAsync(string type, string query)
 {
     if (TwitchTypeToUrlMap.TryGetValue(type, out string url))
     {
@@ -119,5 +121,18 @@ public class TwitchHttpClient : ITwitchHttpClient
         throw new ArgumentException($"The type '{type}' is not valid.");
     }
 }
+
+    public async Task<bool> CheckIfStreamIsOnline()
+    {
+        var content = await GetAsync("Streams", $"?user_id={_configuration["ChannelId"]}");
+
+        var jsonResponse = JsonSerializer.Deserialize<JsonObject>(content);
+
+        // Data array is empty if the stream is not live
+        // And is filled if the stream is live 
+        bool IsLive = jsonResponse["data"].AsArray().Count() != 0;
+
+        return IsLive;
+    }
 
 }
