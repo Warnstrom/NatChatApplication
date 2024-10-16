@@ -277,17 +277,18 @@ namespace TwitchChatHueControls
                 AnsiConsole.Markup("[bold red]\nError: Twitch Configuration is incomplete.\n[/]");
                 return;
             }
+            else if (!OBS_Configured)
+            {
+                AnsiConsole.Markup("[bold red]\nError: OBS Configuration is incomplete.\n[/]");
+                return;
+            }
             else
             {
-                if (OBSWebSocket._obs != null)
-                {
-                    await EnsureOBSConnectionAsync();
-                }
-                else
+                if (OBSWebSocket._obs == null)
                 {
                     OBSWebSocket.InitializeOBSWebsocket();
-                    await EnsureOBSConnectionAsync();
                 }
+                await EnsureOBSConnectionAsync();
 
                 const string ws = "wss://eventsub.wss.twitch.tv/ws"; // Twitch EventSub websocket endpoint
                 await eventSubListener.ValidateAndConnectAsync(new Uri(ws)); // Connect to the EventSub websocket
