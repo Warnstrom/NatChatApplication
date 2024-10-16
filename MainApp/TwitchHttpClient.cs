@@ -103,24 +103,53 @@ public class TwitchHttpClient : ITwitchHttpClient
         }
     }
 
-    // Query format: ?query=a_seagull&live_only=true etc.
     private async Task<string> GetAsync(string type, string query)
     {
-        if (TwitchTypeToUrlMap.TryGetValue(type, out string url))
+        // Check if the provided type exists in the URL map
+        if (!TwitchTypeToUrlMap.TryGetValue(type, out string url))
         {
+            AnsiConsole.Markup($"[red]Error: The type '{type}' is not valid.[/]\n");
+            return string.Empty; // Return an empty string if type is invalid
+        }
+
+        try
+        {
+            // Send the HTTP GET request
             HttpResponseMessage response = await _httpClient.GetAsync($"{url}{query}");
 
-            response.EnsureSuccessStatusCode();
-
-            string content = await response.Content.ReadAsStringAsync();
-
-            return content;
+            // Check if the status code is a success (2xx)
+            if (response.IsSuccessStatusCode)
+            {
+                string content = await response.Content.ReadAsStringAsync();
+                return content; // Return the content if the request is successful
+            }
+            else
+            {
+                AnsiConsole.Markup($"[red]Error: Failed to get a successful response. Status Code: {response.StatusCode}[/]\n");
+                AnsiConsole.Markup($"[yellow]Consider checking the ChannelId value if it's valid[/]\n");
+                return string.Empty; // Return an empty string on failure
+            }
         }
-        else
+        catch (HttpRequestException ex)
         {
-            throw new ArgumentException($"The type '{type}' is not valid.");
+            // Handle HTTP-related exceptions, e.g., network errors
+            AnsiConsole.Markup($"[red]HTTP Error: {ex.Message}[/]\n");
+            return string.Empty; // Return an empty string on network errors
+        }
+        catch (TaskCanceledException)
+        {
+            // Handle request timeouts or cancellations
+            AnsiConsole.Markup("[red]Error: The request was canceled or timed out.[/]\n");
+            return string.Empty; // Return an empty string on timeout
+        }
+        catch (Exception ex)
+        {
+            // Catch any other general exceptions
+            AnsiConsole.Markup($"[red]Error: An unexpected error occurred. {ex.Message}[/]\n");
+            return string.Empty; // Return an empty string for other errors
         }
     }
+
 
     public async Task<bool> CheckIfStreamIsOnline()
     {
