@@ -347,17 +347,25 @@ namespace TwitchChatHueControls
             if (string.IsNullOrEmpty(configValue))
             {
                 List<string> choices = getChoicesFunc.Invoke();
+                string selectedOption = null;
+                if (choices.Count > 0)
+                {
+                    var prompt = new SelectionPrompt<string>()
+                        .Title($"[grey]{promptTitle}[/]")
+                        .AddChoices(choices)
+                        .HighlightStyle(new Style(foreground: Color.LightSkyBlue1)) // Subtle blue highlight for selected option
+                        .Mode(SelectionMode.Leaf) // Leaf mode for modern selection UX
+                        .WrapAround(false)        // Disable wrap-around behavior
+                        .PageSize(5);            // Fit all options on one page
 
-                var prompt = new SelectionPrompt<string>()
-                    .Title($"[grey]{promptTitle}[/]")
-                    .AddChoices(choices)
-                    .HighlightStyle(new Style(foreground: Color.LightSkyBlue1)) // Subtle blue highlight for selected option
-                    .Mode(SelectionMode.Leaf) // Leaf mode for modern selection UX
-                    .WrapAround(false)        // Disable wrap-around behavior
-                    .PageSize(5);            // Fit all options on one page
-
-                // Get the selected option
-                string selectedOption = AnsiConsole.Prompt(prompt);
+                    // Get the selected option
+                    selectedOption = AnsiConsole.Prompt(prompt);
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine($"[yellow]Couldn't find ({configKey}) you can add/change this value manually later.[/]");
+                    selectedOption = "";
+                }
                 await jsonController.UpdateAsync(configKey, selectedOption);
             }
         }

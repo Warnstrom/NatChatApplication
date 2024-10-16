@@ -105,34 +105,39 @@ public class TwitchHttpClient : ITwitchHttpClient
 
     // Query format: ?query=a_seagull&live_only=true etc.
     private async Task<string> GetAsync(string type, string query)
-{
-    if (TwitchTypeToUrlMap.TryGetValue(type, out string url))
     {
-        HttpResponseMessage response = await _httpClient.GetAsync($"{url}{query}");
+        if (TwitchTypeToUrlMap.TryGetValue(type, out string url))
+        {
+            HttpResponseMessage response = await _httpClient.GetAsync($"{url}{query}");
 
-        response.EnsureSuccessStatusCode();
+            response.EnsureSuccessStatusCode();
 
-        string content = await response.Content.ReadAsStringAsync();
+            string content = await response.Content.ReadAsStringAsync();
 
-        return content;
+            return content;
+        }
+        else
+        {
+            throw new ArgumentException($"The type '{type}' is not valid.");
+        }
     }
-    else
-    {
-        throw new ArgumentException($"The type '{type}' is not valid.");
-    }
-}
 
     public async Task<bool> CheckIfStreamIsOnline()
     {
-        var content = await GetAsync("Streams", $"?user_id={_configuration["ChannelId"]}");
+        if (_configuration["ChannelId"].Length != 0)
+        {
+            var content = await GetAsync("Streams", $"?user_id={_configuration["ChannelId"]}");
 
-        var jsonResponse = JsonSerializer.Deserialize<JsonObject>(content);
+            var jsonResponse = JsonSerializer.Deserialize<JsonObject>(content);
 
-        // Data array is empty if the stream is not live
-        // And is filled if the stream is live 
-        bool IsLive = jsonResponse["data"].AsArray().Count() != 0;
+            // Data array is empty if the stream is not live
+            // And is filled if the stream is live 
+            bool IsLive = jsonResponse["data"].AsArray().Count() != 0;
 
-        return IsLive;
+            return IsLive;
+
+        }
+        return false;
     }
 
 }

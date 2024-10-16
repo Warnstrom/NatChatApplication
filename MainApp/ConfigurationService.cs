@@ -18,8 +18,6 @@ public class ConfigurationService(IJsonFileController jsonFileController, ITwitc
     {
         bool StreamOnline = await twitchHttpClient.CheckIfStreamIsOnline();
 
-
-
         var keys = new Dictionary<int, string>
 {
     { 0, "Exit" },
@@ -31,7 +29,10 @@ public class ConfigurationService(IJsonFileController jsonFileController, ITwitc
     { 7, "OBS_IP" },
     { 8, "OBS_Port" },
     { 9, "OBS_Password" },
-    { 10, "RedirectUri" }
+    { 10, "OBS_MicName" },
+    { 11, "OBS_Scene" },
+    { 12, "OBS_SourceName" },
+    { 13, "RedirectUri" }
 };
 
         await ShowConfigurationWithStreamStatusCheck(StreamOnline);
@@ -73,27 +74,6 @@ public class ConfigurationService(IJsonFileController jsonFileController, ITwitc
         }
 
         await jsonFileController.UpdateAsync(selectedKey, newValue);
-
-        // Show updated configuration again after making changes
-        await ShowConfigurationWithStreamStatusCheck(StreamOnline);
-
-        // Check if the selected key is in the list of sensitive keys
-        if (sensitiveKeys.Contains(selectedKey) && StreamOnline)
-        {
-            newValue = AnsiConsole.Prompt(
-                new TextPrompt<string>($"[yellow]Enter the new value for {selectedKey}:[/]")
-                    .Secret());
-        }
-        else
-        {
-            newValue = AnsiConsole.Prompt(
-                new TextPrompt<string>($"[yellow]Enter the new value for {selectedKey}:[/]")
-                    .AllowEmpty());
-        }
-
-        await jsonFileController.UpdateAsync(selectedKey, newValue);
-
-        configuration.Reload();
 
         await ShowConfigurationWithStreamStatusCheck(StreamOnline);
     }
