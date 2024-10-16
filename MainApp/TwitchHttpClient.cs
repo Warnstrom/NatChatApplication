@@ -25,12 +25,15 @@ public class TwitchHttpClient : ITwitchHttpClient
     private readonly string _clientId;
     private string _oauthToken;
     private readonly IConfiguration _configuration;
+    private readonly IJsonFileController _jsonFileController;
     private readonly ArgsService _argsService;
     private readonly TwitchLib.Api.TwitchAPI _api;
 
-    public TwitchHttpClient(IConfiguration configuration, TwitchLib.Api.TwitchAPI api, ArgsService argsService)
+    public TwitchHttpClient(IConfiguration configuration, TwitchLib.Api.TwitchAPI api, 
+    ArgsService argsService, IJsonFileController jsonFileController)
     {
         _configuration = configuration;
+        _jsonFileController = jsonFileController;
         _api = api;
         _argsService = argsService;
         _clientId = configuration["ClientId"];
@@ -50,6 +53,8 @@ public class TwitchHttpClient : ITwitchHttpClient
             _httpClient.DefaultRequestHeaders.Remove("Authorization");
         }
         _httpClient.DefaultRequestHeaders.Add("Authorization", "Bearer " + _oauthToken);
+        await _jsonFileController.UpdateAsync("AccessToken", _oauthToken);
+
     }
 
     private void LogRequestHeaders()

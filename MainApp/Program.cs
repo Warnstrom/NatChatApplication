@@ -270,7 +270,7 @@ namespace TwitchChatHueControls
         {
             // Validate the Twitch configuration before proceeding
             bool twitchConfigured = await ValidateTwitchConfiguration();
-            bool OBS_Configured = ValidateOBSConfiguration(); // Check if Twitch is configured
+            bool OBS_Configured = ValidateOBSConfiguration();
 
             if (!twitchConfigured)
             {
@@ -279,6 +279,15 @@ namespace TwitchChatHueControls
             }
             else
             {
+                if (OBSWebSocket._obs != null)
+                {
+                    await EnsureOBSConnectionAsync();
+                }
+                else
+                {
+                    OBSWebSocket.InitializeOBSWebsocket();
+                    await EnsureOBSConnectionAsync();
+                }
 
                 const string ws = "wss://eventsub.wss.twitch.tv/ws"; // Twitch EventSub websocket endpoint
                 await eventSubListener.ValidateAndConnectAsync(new Uri(ws)); // Connect to the EventSub websocket
@@ -330,12 +339,41 @@ namespace TwitchChatHueControls
         }
 
         // Helper method to ensure OBS is connected
-        private async Task EnsureOBSConnectionAsync()
+        private async Task EnsureOBSConnectionAsync(int maxRetries = 10, int delayInSeconds = 5)
         {
-            while (!OBSWebSocket.IsConnected())
+            int retryCount = 0;
+
+            while (!OBSWebSocket.IsConnected() && retryCount < maxRetries)
             {
-                AnsiConsole.Markup("[yellow]Waiting for OBS to connect...[/]\n");
-                await Task.Delay(1000); // Wait for 1 second before checking again
+                AnsiConsole.Markup($"[yellow]Waiting for OBS to connect... Attempt {retryCount + 1}/{maxRetries}[/]\n");
+
+                // Try to reconnect if OBS is not connected
+                await OBSWebSocket.Connect();
+
+                // Wait for the specified delay before trying again
+                await Task.Delay(delayInSeconds * 1000);
+
+                retryCount++;
+            }
+
+            // If still not connected after retries, notify the user and prompt for action
+            if (!OBSWebSocket.IsConnected())
+            {
+                bool retry = AnsiConsole.Confirm("[red]OBS is still not connected. Do you want to keep trying?[/]", false);
+
+                if (retry)
+                {
+                    // Recursively retry again with the same number of max retries
+                    await EnsureOBSConnectionAsync(maxRetries, delayInSeconds);
+                }
+                else
+                {
+                    AnsiConsole.Markup("[bold red]Failed to connect to OBS after multiple attempts.[/]\n");
+                }
+            }
+            else
+            {
+                AnsiConsole.Markup("[green]Successfully connected to OBS![/]\n");
             }
         }
 
