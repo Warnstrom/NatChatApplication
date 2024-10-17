@@ -60,7 +60,7 @@ public class ConfigurationService(IJsonFileController jsonFileController, ITwitc
         string? newValue = null;
 
         // Check if the selected key is in the list of sensitive keys
-        if (sensitiveKeys.Contains(selectedKey))
+        if (sensitiveKeys.Contains(selectedKey) && StreamOnline)
         {
             newValue = AnsiConsole.Prompt(
                 new TextPrompt<string>($"[yellow]Enter the new value for {selectedKey}:[/]")

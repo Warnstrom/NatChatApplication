@@ -2,7 +2,7 @@ using Microsoft.Extensions.Configuration;
 using OBSWebsocketDotNet;
 using OBSWebsocketDotNet.Communication;
 using Spectre.Console;
-
+using System;
 public interface IOBSWebSocketService
 {
     Task Connect();        // Connect to the websocket server.
@@ -116,11 +116,11 @@ public class OBSWebSocketService(IConfiguration configuration) : IOBSWebSocketSe
                 AnsiConsole.Markup($"[bold red]Connection error: Requested feature is unsupported due to hardware or software limitations.[/]\n");
                 break;
             case ObsCloseCodes.UnknownReason:
-                AnsiConsole.Markup($"[bold red]Disconnected from OBS WebSocket. Reason: Unknown reason (Code: {e.ObsCloseCode}).[/]\n");
+                AnsiConsole.Markup($"[bold red]Unknown Error. Reason: Unknown reason (Code: {e.ObsCloseCode}).[/]\n");
                 break;
             default:
                 // Generic message for unrecognized close codes
-                AnsiConsole.Markup($"[bold red]Disconnected from OBS WebSocket. Reason: Unknown error (Code: {e.ObsCloseCode}).[/]\n");
+                AnsiConsole.Markup($"[bold red]Unknown Error. Reason: Unknown error (Code: {e.ObsCloseCode}).[/]\n");
                 break;
         }
 
@@ -148,23 +148,39 @@ public class OBSWebSocketService(IConfiguration configuration) : IOBSWebSocketSe
         return null;
     }
 
+    private string GetPlatformSpecificInputCapture()
+    {
+        PlatformID platform = Environment.OSVersion.Platform;
+
+        // Depending on the platform, return the correct input capture string
+        return platform switch
+        {
+            PlatformID.Unix => "pulse_input_capture",     
+            PlatformID.MacOSX => "coreaudio_input_capture",
+            PlatformID.Win32NT => "wasapi_input_capture",  
+            _ => throw new NotSupportedException("Platform not supported for input capture.")
+        };
+    }
+
     public List<string> GetAudioInput()
     {
-        if (_obs.IsConnected)
+        try
         {
-            try
-            {
-                var sceneItems = _obs.GetInputKindList();
+            string inputCaptureType = GetPlatformSpecificInputCapture();
 
-                var sceneItemsList = _obs.GetInputList("pulse_input_capture").Select(x => x.InputName).ToList();
-                return sceneItemsList;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error?!?!: {ex.Message}");
-            }
+            List<string> sceneItems = _obs.GetInputKindList();
+
+            List<string> audioInputs = _obs.GetInputList(inputCaptureType)
+                .Select(x => x.InputName)
+                .ToList();
+
+            return audioInputs;
         }
-        return null;
+        catch (Exception ex)
+        {
+            Console.WriteLine($"An error occurred: {ex.Message}");
+            return new List<string>();
+        }
     }
 
     public List<string> GetSceneSources()
@@ -183,7 +199,7 @@ public class OBSWebSocketService(IConfiguration configuration) : IOBSWebSocketSe
                 Console.WriteLine($"Error?!?!: {ex.Message}");
             }
         }
-        return null;
+        return new List<string>();
     }
 
 

@@ -334,9 +334,6 @@ namespace TwitchChatHueControls
             string obsIp = await GetOrUpdateConfigValue("OBS_IP", "[yellow]Please enter the OBS Websocket IP Address:[/]");
             string obsPort = await GetOrUpdateConfigValue("OBS_Port", "[yellow]Please enter the OBS Port:[/]");
             string obsPassword = await GetOrUpdateConfigValue("OBS_Password", "[yellow]Please enter the OBS Websocket Password:[/]");
-
-            // No need to await, as connection is synchronous in this context
-            await OBSWebSocket.Connect();
         }
 
         // Helper method to ensure OBS is connected
