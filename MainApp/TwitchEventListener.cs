@@ -320,7 +320,7 @@ IJsonFileController jsonFileController, ArgsService argsService, ITwitchHttpClie
                     await HandleCustomRewardRedemptionAsync(payload);
                     break;
                 case "channel.chat.message":
-                    if (argsService.Args.Length != 0 && argsService.Args[0] == "dev")
+                    if (argsService.Args.Length != 0 && argsService.Args[0] == "auto")
                     {
                         if (payload["payload"]["event"]["chatter_user_login"].ToString() == "noraschair" || payload["payload"]["event"]["chatter_user_login"].ToString() == "chayzeruh")
                         {
@@ -390,7 +390,7 @@ IJsonFileController jsonFileController, ArgsService argsService, ITwitchHttpClie
             {
                 while (countdownTime.TotalSeconds > 0)
                 {
-                    ctx.Status = $"[bold yellow]Remaining time: {countdownTime.Minutes:D2}:{countdownTime.Seconds:D2}[/]";
+                    //ctx.Status = $"[bold yellow]Remaining time: {countdownTime.Minutes:D2}:{countdownTime.Seconds:D2}[/]";
 
                     await Task.Delay(1000);
                     countdownTime = countdownTime.Subtract(TimeSpan.FromSeconds(1));

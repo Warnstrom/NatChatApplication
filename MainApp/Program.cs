@@ -9,10 +9,11 @@ namespace TwitchChatHueControls
     class Program
     {
         private static string SettingsFile = "";
-
+        private static string ConfigFile = "";
         private static async Task Main(string[] args)
         {
             SettingsFile = args.FirstOrDefault() == "dev" ? "devmodesettings.json" : "appsettings.json";
+            ConfigFile = args.Length == 2 ? args[1] : "";
             try
             {
                 // Create a new ServiceCollection (IoC container) for dependency injection
@@ -62,14 +63,14 @@ namespace TwitchChatHueControls
             // Create and configure the ConfigurationBuilder to load settings from the specified JSON file
             var configurationBuilder = new ConfigurationBuilder()
                 .SetBasePath(Directory.GetCurrentDirectory())
-                .AddJsonFile(SettingsFile, optional: true, reloadOnChange: true);
+                .AddJsonFile(ConfigFile.Length != 0 ? ConfigFile : SettingsFile, optional: true, reloadOnChange: true);
             // Build the configuration object
             IConfigurationRoot configurationRoot = configurationBuilder.Build();
             // Register the required services and controllers65
             services.AddSingleton<IConfiguration>(configurationRoot);
             services.AddSingleton<IConfigurationRoot>(configurationRoot);
             services.AddSingleton<IConfigurationService, ConfigurationService>();
-            services.AddSingleton<IJsonFileController>(sp => new JsonFileController(SettingsFile, configurationRoot));
+            services.AddSingleton<IJsonFileController>(sp => new JsonFileController(ConfigFile.Length != 0 ? ConfigFile : SettingsFile, configurationRoot));
             services.AddSingleton(new ArgsService(args));
             services.AddSingleton<TwitchLib.Api.TwitchAPI>();
             services.AddSingleton<TwitchEventSubListener>();
@@ -84,12 +85,19 @@ namespace TwitchChatHueControls
     // The main application class, handling the core flow of the program
     public class App(IConfiguration configuration, IConfigurationService configurationEditor, IJsonFileController jsonController,
             TwitchLib.Api.TwitchAPI api, TwitchEventSubListener eventSubListener, WebServer webServer,
-            ITwitchHttpClient twitchHttpClient, OBSWebSocketService OBSWebSocket)
+            ITwitchHttpClient twitchHttpClient, OBSWebSocketService OBSWebSocket, ArgsService argsService)
     {
         // The main run method to start the app's functionality
         public async Task RunAsync()
         {
-            await StartMenu();
+            if (argsService.Args.Length != 0 && argsService.Args[0] == "auto")
+            {
+                await StartApp();
+            }
+            else
+            {
+                await StartMenu();
+            }
         }
 
         // Method to handle the main menu flow
